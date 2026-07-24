@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { getTransporter } from "@/lib/mailer";
+import { getTransporter, appendToSentBox } from "@/lib/mailer";
 import path from "path";
 import { htmlToText } from "html-to-text";
 
@@ -29,6 +29,13 @@ export async function POST(request) {
     };
 
     await transporter.sendMail(mailOptions);
+    appendToSentBox({
+      from: mailOptions.from,
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      html: mailOptions.html
+    }).catch(err => console.error("IMAP Sent sync error:", err));
+
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: "Test email failed", details: error.message }, { status: 500 });

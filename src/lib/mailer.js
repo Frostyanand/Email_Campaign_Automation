@@ -1,7 +1,8 @@
 import nodemailer from "nodemailer";
+import { ImapFlow } from "imapflow";
 
 export function getTransporter() {
-  const host = (process.env.SMTP_HOST || "smtp.titan.email").trim();
+  const host = (process.env.SMTP_HOST || "smtpout.secureserver.net").trim();
   const port = parseInt(process.env.SMTP_PORT || "465", 10);
   const user = (process.env.SMTP_USER || "").trim();
   const pass = (process.env.SMTP_PASS || "").trim();
@@ -31,4 +32,43 @@ export async function verifySmtp() {
       }
     });
   });
+}
+
+export async function appendToSentBox({ from, to, cc, subject, html }) {
+  try {
+    const imapHost = process.env.IMAP_HOST || "imap.secureserver.net";
+    const imapPort = parseInt(process.env.IMAP_PORT || "993", 10);
+    const user = (process.env.SMTP_USER || "").trim();
+    const pass = (process.env.SMTP_PASS || "").trim();
+
+    if (!user || !pass) return;
+
+    const client = new ImapFlow({
+      host: imapHost,
+      port: imapPort,
+      secure: true,
+      auth: { user, pass },
+      logger: false
+    });
+
+    await client.connect();
+
+    const toStr = Array.isArray(to) ? to.join(", ") : to;
+    const ccStr = Array.isArray(cc) && cc.length > 0 ? `Cc: ${cc.join(", ")}\r\n` : "";
+    const dateStr = new Date().toUTCString();
+
+    const rawMessage = 
+`From: ${from}\r\n` +
+`To: ${toStr}\r\n` +
+`${ccStr}` +
+`Subject: ${subject}\r\n` +
+`Date: ${dateStr}\r\n` +
+`Content-Type: text/html; charset=utf-8\r\n\r\n` +
+`${html}`;
+
+    await client.append("Sent", Buffer.from(rawMessage), ["\\Seen"]);
+    await client.logout();
+  } catch (err) {
+    console.error("IMAP Sent Sync Warning:", err.message);
+  }
 }

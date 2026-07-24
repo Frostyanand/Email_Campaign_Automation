@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { getTransporter } from "@/lib/mailer";
+import { getTransporter, appendToSentBox } from "@/lib/mailer";
 import { logEmail } from "@/lib/logger";
 import path from "path";
 import { htmlToText } from "html-to-text";
@@ -33,6 +33,15 @@ export async function POST(request) {
     try {
       const info = await transporter.sendMail(mailOptions);
       responseStr = info.response;
+      
+      // Async IMAP Sent box synchronization
+      appendToSentBox({
+        from: mailOptions.from,
+        to: mailOptions.to,
+        cc: mailOptions.cc,
+        subject: mailOptions.subject,
+        html: mailOptions.html
+      }).catch(err => console.error("IMAP Sent sync error:", err));
       
       await logEmail(campaignId, {
         university: recipient.university,

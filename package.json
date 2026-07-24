@@ -23,6 +23,7 @@
     "date-fns": "^4.4.0",
     "framer-motion": "^12.42.2",
     "html-to-text": "^10.0.0",
+    "imapflow": "^1.5.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.26.0",
     "next": "16.2.11",
