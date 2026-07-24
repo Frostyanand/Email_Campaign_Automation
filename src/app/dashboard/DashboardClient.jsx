@@ -72,6 +72,7 @@ export default function DashboardClient() {
         const res = await fetch("/api/templates");
         const data = await res.json();
         setTemplates(data.templates || []);
+        setSelectedTemplate(prev => prev || "partnership");
         if (data.attachments && data.attachments.length > 0) {
           setUploadedAttachments(prev => prev.length === 0 ? data.attachments : prev);
         }

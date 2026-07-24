@@ -1,9 +1,5 @@
 {
-  "name": "Partnership Proposal",
-  "subject": "Partnership Proposal: {{COMPANY_NAME}} & {{UNIVERSITY_NAME}}",
-  "description": "Email aimed at establishing a formal partnership.",
-  "defaultAttachments": [
-    "Company Profile.pdf",
-    "Brochure.pdf"
-  ]
+  "name": "Instabroad Admissions Partnership",
+  "subject": "Proposal for Exclusive Indian Student Admissions Partnership — Instabroad Medical",
+  "description": "Exclusive Indian Student Admissions Partnership proposal template for Instabroad Medical."
 }
