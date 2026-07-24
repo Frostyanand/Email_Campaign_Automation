@@ -1,8 +1,0 @@
-{
-  "name": "Research Collaboration",
-  "subject": "Research Collaboration Inquiry for {{UNIVERSITY_NAME}}",
-  "description": "Outreach for academic research initiatives.",
-  "defaultAttachments": [
-    "Programs.pdf"
-  ]
-}

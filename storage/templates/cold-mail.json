@@ -1,8 +1,0 @@
-{
-  "name": "Cold Outreach",
-  "subject": "Opportunities for {{UNIVERSITY_NAME}} Students",
-  "description": "Standard introductory email for new university contacts.",
-  "defaultAttachments": [
-    "Company Profile.pdf"
-  ]
-}
