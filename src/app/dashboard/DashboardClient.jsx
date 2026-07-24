@@ -241,7 +241,8 @@ export default function DashboardClient() {
       body: JSON.stringify({
         html,
         subject,
-        attachments: uploadedAttachments
+        attachments: uploadedAttachments,
+        to: testEmailAddress
       })
     }).then(res => res.json()).then(data => {
       if (data.error) throw new Error(data.error);

@@ -1,14 +1,22 @@
 import nodemailer from "nodemailer";
 
 export function getTransporter() {
+  const host = (process.env.SMTP_HOST || "smtp.titan.email").trim();
+  const port = parseInt(process.env.SMTP_PORT || "465", 10);
+  const user = (process.env.SMTP_USER || "").trim();
+  const pass = (process.env.SMTP_PASS || "").trim();
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || "465", 10),
-    secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+    host,
+    port,
+    secure: process.env.SMTP_SECURE === "true" || port === 465,
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user,
+      pass,
     },
+    tls: {
+      rejectUnauthorized: false
+    }
   });
 }
 

@@ -9,13 +9,17 @@ export async function POST(request) {
     const isAuth = await isAuthenticated();
     if (!isAuth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { html, subject, attachments } = await request.json();
+    const { html, subject, attachments, to } = await request.json();
+
+    const recipientList = to 
+      ? to.split(",").map(e => e.trim()).filter(Boolean)
+      : [process.env.ADMIN_EMAIL];
 
     const transporter = getTransporter();
     const mailOptions = {
       from: process.env.SMTP_USER,
-      to: process.env.ADMIN_EMAIL, // Test email goes to admin
-      subject: subject || "Test Email",
+      to: recipientList.length > 0 ? recipientList : process.env.ADMIN_EMAIL,
+      subject: `[TEST EMAIL] ${subject || "Test Email"}`,
       html: html,
       text: htmlToText(html),
       attachments: (attachments || []).map(filename => ({
