@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { getTransporter, appendToSentBox } from "@/lib/mailer";
 import { logEmail } from "@/lib/logger";
-import path from "path";
+import { resolveAttachmentPath } from "@/lib/attachments";
 import { htmlToText } from "html-to-text";
 
 export async function POST(request) {
@@ -25,7 +25,7 @@ export async function POST(request) {
       text: htmlToText(html),
       attachments: (attachments || []).map(filename => ({
         filename,
-        path: path.join(process.cwd(), "storage", "attachments", filename)
+        path: resolveAttachmentPath(filename)
       }))
     };
 

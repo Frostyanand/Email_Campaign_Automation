@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 import { isAuthenticated } from "@/lib/auth";
+import { listAllAttachments } from "@/lib/attachments";
 
 export async function GET() {
   try {
@@ -10,10 +11,8 @@ export async function GET() {
 
     const storagePath = path.join(process.cwd(), "storage");
     const templatesPath = path.join(storagePath, "templates");
-    const attachmentsPath = path.join(storagePath, "attachments");
 
     const templateFiles = await fs.readdir(templatesPath).catch(() => []);
-    const attachmentFiles = await fs.readdir(attachmentsPath).catch(() => []);
 
     const templates = [];
     for (const file of templateFiles) {
@@ -39,7 +38,7 @@ export async function GET() {
       }
     }
 
-    const attachments = attachmentFiles.filter(f => f.endsWith(".pdf"));
+    const attachments = listAllAttachments();
 
     return NextResponse.json({ templates, attachments });
   } catch (error) {

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import fs from "fs";
-import path from "path";
+import { saveAttachment, deleteAttachmentFile } from "@/lib/attachments";
 
 export async function POST(request) {
   try {
@@ -15,25 +14,20 @@ export async function POST(request) {
       return NextResponse.json({ error: "No files uploaded" }, { status: 400 });
     }
 
-    const attachmentsDir = path.join(process.cwd(), "storage", "attachments");
-    if (!fs.existsSync(attachmentsDir)) {
-      fs.mkdirSync(attachmentsDir, { recursive: true });
-    }
-
     const savedFiles = [];
 
     for (const file of files) {
       if (typeof file === "string") continue;
       const buffer = Buffer.from(await file.arrayBuffer());
       const filename = file.name;
-      const targetPath = path.join(attachmentsDir, filename);
-      fs.writeFileSync(targetPath, buffer);
+      saveAttachment(filename, buffer);
       savedFiles.push(filename);
     }
 
     return NextResponse.json({ success: true, files: savedFiles });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to upload attachments" }, { status: 500 });
+    console.error("Attachment upload error:", error);
+    return NextResponse.json({ error: "Failed to upload attachments", details: error.message }, { status: 500 });
   }
 }
 
@@ -45,14 +39,10 @@ export async function DELETE(request) {
     const { filename } = await request.json();
     if (!filename) return NextResponse.json({ error: "Filename required" }, { status: 400 });
 
-    const filePath = path.join(process.cwd(), "storage", "attachments", filename);
-
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
+    deleteAttachmentFile(filename);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to delete attachment" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete attachment", details: error.message }, { status: 500 });
   }
 }
