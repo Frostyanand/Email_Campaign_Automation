@@ -71,32 +71,41 @@ export default function DashboardClient() {
       try {
         const res = await fetch("/api/templates");
         const data = await res.json();
-        setTemplates(data.templates || []);
-        setSelectedTemplate(prev => prev || "partnership");
+        const validTemplates = data.templates || [];
+        setTemplates(validTemplates);
+
+        let initialTmpl = "partnership";
+        const savedState = localStorage.getItem("outreach_campaign_state");
+        if (savedState) {
+          try {
+            const parsed = JSON.parse(savedState);
+            if (parsed.selectedTemplate && validTemplates.some(t => t.id === parsed.selectedTemplate)) {
+              initialTmpl = parsed.selectedTemplate;
+            }
+            setFileStats(parsed.fileStats);
+            setRecipients(parsed.recipients);
+            setUploadedAttachments(parsed.uploadedAttachments || parsed.selectedAttachments || []);
+            setIntervalOption(parsed.intervalOption || "60");
+            setIsTestMode(parsed.isTestMode || false);
+            setTestTargetEmails(parsed.testTargetEmails || "");
+            setSmtpVerified(parsed.smtpVerified || false);
+            setCampaignState(parsed.campaignState === "Running" ? "Paused" : parsed.campaignState);
+            setCampaignId(parsed.campaignId || "");
+          } catch (e) {
+            console.error("Failed to parse saved state", e);
+          }
+        }
+
+        if (!validTemplates.some(t => t.id === initialTmpl) && validTemplates.length > 0) {
+          initialTmpl = validTemplates[0].id;
+        }
+        setSelectedTemplate(initialTmpl);
+
         if (data.attachments && data.attachments.length > 0) {
           setUploadedAttachments(prev => prev.length === 0 ? data.attachments : prev);
         }
       } catch (err) {
         toast.error("Failed to load templates");
-      }
-
-      const savedState = localStorage.getItem("outreach_campaign_state");
-      if (savedState) {
-        try {
-          const parsed = JSON.parse(savedState);
-          setFileStats(parsed.fileStats);
-          setRecipients(parsed.recipients);
-          setSelectedTemplate(parsed.selectedTemplate);
-          setUploadedAttachments(parsed.uploadedAttachments || parsed.selectedAttachments || []);
-          setIntervalOption(parsed.intervalOption);
-          setIsTestMode(parsed.isTestMode || false);
-          setTestTargetEmails(parsed.testTargetEmails || "");
-          setSmtpVerified(parsed.smtpVerified);
-          setCampaignState(parsed.campaignState === "Running" ? "Paused" : parsed.campaignState); // Auto pause on reload
-          setCampaignId(parsed.campaignId);
-        } catch (e) {
-          console.error("Failed to parse saved state", e);
-        }
       }
       setLoadingInitial(false);
     };
@@ -362,6 +371,9 @@ export default function DashboardClient() {
           if (emailList.length > 0) {
             overrideTo = emailList[nextIndex % emailList.length];
           }
+        }
+        if (!overrideTo) {
+          overrideTo = "satyashish@wegbruck.com";
         }
       }
 
@@ -770,10 +782,6 @@ export default function DashboardClient() {
                 </Button>
               ) : (
                 <>
-                  <Button variant="outline" onClick={() => setShowTestEmailModal(true)} disabled={!selectedTemplate || campaignState === "Running"}>
-                    <Mail className="w-4 h-4 mr-2" /> Send Test Email
-                  </Button>
-                  
                   {campaignState === "Ready" || campaignState === "Idle" ? (
                     <Button onClick={() => setShowConfirmModal(true)} disabled={!selectedTemplate || stats.pending === 0}>
                       <Play className="w-4 h-4 mr-2" /> Start Campaign
