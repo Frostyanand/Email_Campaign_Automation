@@ -3,6 +3,8 @@ import { isAuthenticated } from "@/lib/auth";
 import { getTransporter, appendToSentBox } from "@/lib/mailer";
 import { resolveAttachmentPath } from "@/lib/attachments";
 import { htmlToText } from "html-to-text";
+import fs from "fs";
+import path from "path";
 
 export async function POST(request) {
   try {
@@ -15,6 +17,28 @@ export async function POST(request) {
       ? to.split(",").map(e => e.trim()).filter(Boolean)
       : [process.env.ADMIN_EMAIL];
 
+    const processedAttachments = (attachments || []).map(att => {
+      if (typeof att === "string") {
+        const diskPath = path.join(process.cwd(), "storage", "attachments", att);
+        if (fs.existsSync(diskPath)) {
+          return { filename: att, path: diskPath };
+        }
+        return { filename: att, path: resolveAttachmentPath(att) };
+      } else if (att && att.content) {
+        return {
+          filename: att.filename,
+          content: Buffer.from(att.content, "base64")
+        };
+      } else if (att && att.filename) {
+        const diskPath = path.join(process.cwd(), "storage", "attachments", att.filename);
+        if (fs.existsSync(diskPath)) {
+          return { filename: att.filename, path: diskPath };
+        }
+        return { filename: att.filename, path: resolveAttachmentPath(att.filename) };
+      }
+      return null;
+    }).filter(Boolean);
+
     const transporter = getTransporter();
     const mailOptions = {
       from: process.env.SMTP_USER,
@@ -22,10 +46,7 @@ export async function POST(request) {
       subject: `[TEST EMAIL] ${subject || "Test Email"}`,
       html: html,
       text: htmlToText(html),
-      attachments: (attachments || []).map(filename => ({
-        filename,
-        path: resolveAttachmentPath(filename)
-      }))
+      attachments: processedAttachments
     };
 
     await transporter.sendMail(mailOptions);

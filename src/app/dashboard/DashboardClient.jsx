@@ -180,37 +180,51 @@ export default function DashboardClient() {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    const formData = new FormData();
-    files.forEach(f => formData.append("files", f));
+    try {
+      const base64Files = await Promise.all(
+        files.map(file => new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const resultStr = String(reader.result || "");
+            const base64 = resultStr.includes(",") ? resultStr.split(",")[1] : resultStr;
+            resolve({ filename: file.name, content: base64 });
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        }))
+      );
 
-    const promise = fetch("/api/upload-attachment", { method: "POST", body: formData })
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error);
-        setUploadedAttachments(prev => {
-          const combined = [...prev];
-          data.files.forEach(f => {
-            if (!combined.includes(f)) combined.push(f);
-          });
-          return combined;
+      setUploadedAttachments(prev => {
+        const combined = [...prev];
+        base64Files.forEach(f => {
+          const fname = f.filename;
+          if (!combined.some(item => (typeof item === "string" ? item === fname : item.filename === fname))) {
+            combined.push(f);
+          }
         });
+        return combined;
       });
 
-    toast.promise(promise, {
-      loading: "Uploading attachment(s)...",
-      success: "Attachment(s) uploaded successfully",
-      error: (err) => err.message
-    });
+      // Best effort backend sync
+      const formData = new FormData();
+      files.forEach(f => formData.append("files", f));
+      fetch("/api/upload-attachment", { method: "POST", body: formData }).catch(() => {});
+
+      toast.success("Attachment(s) added successfully!");
+    } catch (err) {
+      toast.error("Failed to process attachment");
+    }
     e.target.value = "";
   };
 
-  const removeAttachment = async (filename) => {
-    setUploadedAttachments(prev => prev.filter(a => a !== filename));
+  const removeAttachment = async (att) => {
+    const nameToRemove = typeof att === "string" ? att : att.filename;
+    setUploadedAttachments(prev => prev.filter(item => (typeof item === "string" ? item !== nameToRemove : item.filename !== nameToRemove)));
     try {
       await fetch("/api/upload-attachment", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename })
+        body: JSON.stringify({ filename: nameToRemove })
       });
     } catch (e) {
       console.error(e);
@@ -695,23 +709,26 @@ export default function DashboardClient() {
 
                   {uploadedAttachments.length > 0 ? (
                     <div className="space-y-1.5 mt-1 max-h-36 overflow-y-auto pr-1">
-                      {uploadedAttachments.map((att) => (
-                        <div key={att} className="flex items-center justify-between bg-secondary/40 border border-border/50 px-2.5 py-1.5 rounded text-xs font-mono">
-                          <span className="truncate max-w-[180px] flex items-center gap-1.5" title={att}>
-                            <FileText className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            {att}
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={() => removeAttachment(att)}
-                            className="text-muted-foreground hover:text-destructive p-0.5 transition-colors"
-                            disabled={campaignState === "Running"}
-                            title="Remove attachment"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
+                      {uploadedAttachments.map((att) => {
+                        const fname = typeof att === "string" ? att : att.filename;
+                        return (
+                          <div key={fname} className="flex items-center justify-between bg-secondary/40 border border-border/50 px-2.5 py-1.5 rounded text-xs font-mono">
+                            <span className="truncate max-w-[180px] flex items-center gap-1.5" title={fname}>
+                              <FileText className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                              {fname}
+                            </span>
+                            <button 
+                              type="button"
+                              onClick={() => removeAttachment(att)}
+                              className="text-muted-foreground hover:text-destructive p-0.5 transition-colors"
+                              disabled={campaignState === "Running"}
+                              title="Remove attachment"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <span className="text-xs text-muted-foreground italic">No files attached to campaign</span>
