@@ -52,11 +52,12 @@ export function parseExcelBuffer(buffer) {
       const extractedEmails = [];
       Object.values(row).forEach(val => {
         if (typeof val === "string" || typeof val === "number") {
-          const matches = String(val).match(EMAIL_REGEX);
+          const rawStr = String(val).replace(/[\u00A0\u200B\u200C\u200D]/g, " ");
+          const matches = rawStr.match(EMAIL_REGEX);
           if (matches) {
             matches.forEach(m => {
-              const clean = m.toLowerCase().trim();
-              if (!extractedEmails.includes(clean)) {
+              const clean = m.toLowerCase().replace(/^[^\w+]+|[^\w+]+$/g, "").trim();
+              if (clean && !extractedEmails.includes(clean)) {
                 extractedEmails.push(clean);
               }
             });
