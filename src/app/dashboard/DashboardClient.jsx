@@ -465,7 +465,8 @@ export default function DashboardClient() {
   const filteredRecipients = recipients.filter(r => 
     r.university?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     r.country?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.to?.toLowerCase().includes(searchQuery.toLowerCase())
+    r.to?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (r.cc && r.cc.some(c => c.toLowerCase().includes(searchQuery.toLowerCase())))
   );
 
   const stats = {
@@ -704,7 +705,7 @@ export default function DashboardClient() {
                       <TableHead className="w-12">Use</TableHead>
                       <TableHead>University</TableHead>
                       <TableHead>Country</TableHead>
-                      <TableHead>To</TableHead>
+                      <TableHead>Email Addresses</TableHead>
                       <TableHead>Subject</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
@@ -730,7 +731,14 @@ export default function DashboardClient() {
                           </TableCell>
                           <TableCell className="font-medium">{r.university}</TableCell>
                           <TableCell>{r.country}</TableCell>
-                          <TableCell>{r.to}</TableCell>
+                          <TableCell className="max-w-[240px]">
+                            <div className="font-mono text-xs truncate" title={r.to}>{r.to}</div>
+                            {r.cc && r.cc.length > 0 && (
+                              <div className="text-[11px] text-amber-400 font-mono mt-0.5 truncate" title={`CC: ${r.cc.join(", ")}`}>
+                                <span className="font-semibold text-amber-500">CC:</span> {r.cc.join(", ")}
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">{rSubj}</TableCell>
                           <TableCell>
                             <Badge variant={
