@@ -32,7 +32,7 @@ export async function POST(request) {
     let responseStr = "Success";
     try {
       const info = await transporter.sendMail(mailOptions);
-      responseStr = info.response;
+      responseStr = info.response || "Success";
       
       // Async IMAP Sent box synchronization
       appendToSentBox({
@@ -54,6 +54,7 @@ export async function POST(request) {
 
       return NextResponse.json({ success: true, timestamp: Date.now() });
     } catch (sendError) {
+      console.error("Nodemailer send error:", sendError);
       responseStr = sendError.message;
       
       await logEmail(campaignId, {
@@ -63,11 +64,12 @@ export async function POST(request) {
         status: "Failed",
         attempts: attempt,
         response: responseStr
-      });
+      }).catch(() => {});
 
-      return NextResponse.json({ error: sendError.message, timestamp: Date.now() }, { status: 500 });
+      return NextResponse.json({ error: sendError.message || "Failed to send email", timestamp: Date.now() }, { status: 500 });
     }
   } catch (error) {
-    return NextResponse.json({ error: "Server error", timestamp: Date.now() }, { status: 500 });
+    console.error("Send-email API top-level error:", error);
+    return NextResponse.json({ error: error.message || "Server error", timestamp: Date.now() }, { status: 500 });
   }
 }
