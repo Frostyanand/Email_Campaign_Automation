@@ -48,6 +48,7 @@ export default function DashboardClient() {
   const intervalOptionRef = useRef(intervalOption);
   const isTestModeRef = useRef(isTestMode);
   const testTargetEmailsRef = useRef(testTargetEmails);
+  const recipientsRef = useRef(recipients);
   const runningRef = useRef(false);
 
   useEffect(() => {
@@ -65,6 +66,10 @@ export default function DashboardClient() {
   useEffect(() => {
     testTargetEmailsRef.current = testTargetEmails;
   }, [testTargetEmails]);
+
+  useEffect(() => {
+    recipientsRef.current = recipients;
+  }, [recipients]);
 
   // Load state from localStorage & fetch templates
   useEffect(() => {
@@ -84,7 +89,8 @@ export default function DashboardClient() {
               initialTmpl = parsed.selectedTemplate;
             }
             setFileStats(parsed.fileStats);
-            setRecipients(parsed.recipients);
+            recipientsRef.current = parsed.recipients || [];
+            setRecipients(parsed.recipients || []);
             setUploadedAttachments(parsed.uploadedAttachments || parsed.selectedAttachments || []);
             setIntervalOption(parsed.intervalOption || "60");
             setIsTestMode(parsed.isTestMode || false);
@@ -152,7 +158,8 @@ export default function DashboardClient() {
           duplicateEmailsRemoved: data.data.duplicateEmailsRemoved,
           rowsIgnored: data.data.rowsIgnored
         });
-        setRecipients(data.data.recipients);
+        recipientsRef.current = data.data.recipients || [];
+        setRecipients(data.data.recipients || []);
         setCampaignState("Ready");
         setCampaignId(`CMP-${format(new Date(), "yyyyMMdd-HHmmss")}`);
         setSmtpVerified(false);
@@ -324,17 +331,19 @@ export default function DashboardClient() {
 
   // Campaign Engine Loop
   const runCampaignLoop = async () => {
+    console.log("%c[Campaign Engine] STARTING LOOP", "color: #3b82f6; font-weight: bold", {
+      mode: isTestModeRef.current ? "TEST MODE" : "LIVE MODE",
+      state: campaignStateRef.current,
+      totalRecipients: recipientsRef.current?.length || 0
+    });
+
     try {
       while (campaignStateRef.current === "Running") {
-        // Find next pending or retrying
-        let nextIndex = -1;
-        
-        let currentRecipients = [];
-        setRecipients(prev => { currentRecipients = prev; return prev; });
-        
-        nextIndex = currentRecipients.findIndex(r => r.status === "Pending" || r.status === "Retrying");
+        const currentRecipients = recipientsRef.current || [];
+        const nextIndex = currentRecipients.findIndex(r => r.status === "Pending" || r.status === "Retrying");
         
         if (nextIndex === -1) {
+          console.log("%c[Campaign Engine] COMPLETED: No pending recipients remaining.", "color: #22c55e; font-weight: bold");
           campaignStateRef.current = "Completed";
           setCampaignState("Completed");
           toast.success("Campaign Completed!");
@@ -344,11 +353,23 @@ export default function DashboardClient() {
         const recipient = currentRecipients[nextIndex];
         const attempt = recipient.attempts + 1;
         
+        console.log(`%c[Campaign Engine] [${nextIndex + 1}/${currentRecipients.length}] Sending to: ${recipient.university}`, "color: #eab308", {
+          university: recipient.university,
+          to: recipient.to,
+          cc: recipient.cc,
+          attempt
+        });
+
         // Update state to sending
-        setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Sending", attempts: attempt } : r));
+        const updatedRecipientsSending = currentRecipients.map((r, i) => 
+          i === nextIndex ? { ...r, status: "Sending", attempts: attempt } : r
+        );
+        recipientsRef.current = updatedRecipientsSending;
+        setRecipients(updatedRecipientsSending);
 
         const tmpl = templates.find(t => t.id === selectedTemplate);
         if (!tmpl) {
+          console.error("[Campaign Engine] ERROR: Selected template not found!", selectedTemplate);
           pauseCampaign();
           toast.error("Template not found!");
           break;
@@ -380,6 +401,8 @@ export default function DashboardClient() {
           }
         }
 
+        console.log(`[Campaign Engine] Requesting POST /api/send-email ... Target To: ${overrideTo || recipient.to}`);
+
         try {
           const res = await fetch("/api/send-email", {
             method: "POST",
@@ -396,19 +419,27 @@ export default function DashboardClient() {
           });
           const data = await res.json();
           
-          if (data.success) {
-            setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Sent", sentTime: data.timestamp } : r));
+          if (res.ok && data.success) {
+            console.log(`%c[Campaign Engine] SUCCESS for ${recipient.university}`, "color: #22c55e", data);
+            const updatedRecipientsSent = recipientsRef.current.map((r, i) => 
+              i === nextIndex ? { ...r, status: "Sent", sentTime: data.timestamp } : r
+            );
+            recipientsRef.current = updatedRecipientsSent;
+            setRecipients(updatedRecipientsSent);
+
             if (isTestModeRef.current) {
               toast.success(`[Test Mode] Sent to ${overrideTo} (${recipient.university})`);
             } else {
               toast.success(`Sent email to ${recipient.university}`);
             }
           } else {
-            throw new Error(data.error || "Email failed to send");
+            console.error(`[Campaign Engine] SERVER ERROR for ${recipient.university}:`, data.error || data);
+            throw new Error(data.error || "Failed to send email");
           }
         } catch (error) {
+          console.error(`[Campaign Engine] FAILED for ${recipient.university} (Attempt ${attempt}/3):`, error.message);
           toast.error(`Error sending to ${recipient.university}: ${error.message}`);
-          // Handle failure & retries
+
           if (attempt < 4) {
             const delays = [
               [30, 40],
@@ -418,28 +449,42 @@ export default function DashboardClient() {
             const [min, max] = delays[attempt - 1];
             const delaySecs = Math.floor(Math.random() * (max - min + 1)) + min;
             
-            setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Retrying", error: error.message } : r));
+            console.warn(`[Campaign Engine] Will retry ${recipient.university} in ${delaySecs}s...`);
+
+            const updatedRecipientsRetry = recipientsRef.current.map((r, i) => 
+              i === nextIndex ? { ...r, status: "Retrying", error: error.message } : r
+            );
+            recipientsRef.current = updatedRecipientsRetry;
+            setRecipients(updatedRecipientsRetry);
             
             if (campaignStateRef.current === "Running") {
               await new Promise(r => setTimeout(r, delaySecs * 1000));
               continue;
             }
           } else {
-            setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Failed", error: error.message } : r));
+            const updatedRecipientsFailed = recipientsRef.current.map((r, i) => 
+              i === nextIndex ? { ...r, status: "Failed", error: error.message } : r
+            );
+            recipientsRef.current = updatedRecipientsFailed;
+            setRecipients(updatedRecipientsFailed);
           }
         }
 
         // Calculate random delay for next email based on interval option
         if (campaignStateRef.current === "Running") {
           const intervalBase = parseInt(intervalOptionRef.current, 10);
-          const minDelay = intervalBase * 0.9;
-          const maxDelay = intervalBase * 1.1;
+          const minDelay = Math.max(1, Math.floor(intervalBase * 0.9));
+          const maxDelay = Math.max(1, Math.floor(intervalBase * 1.1));
           const delaySecs = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
           
+          console.log(`[Campaign Engine] Waiting ${delaySecs}s until next email dispatch...`);
           await new Promise(r => setTimeout(r, delaySecs * 1000));
         }
       }
+    } catch (fatalErr) {
+      console.error("[Campaign Engine] Fatal unhandled loop error:", fatalErr);
     } finally {
+      console.log("%c[Campaign Engine] LOOP TERMINATED. State:", "color: #9ca3af", campaignStateRef.current);
       runningRef.current = false;
     }
   };
