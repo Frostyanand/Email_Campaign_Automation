@@ -37,6 +37,7 @@ export default function DashboardClient() {
   
   // UI Modals
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
   const [showTestEmailModal, setShowTestEmailModal] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState("");
 
@@ -577,7 +578,23 @@ export default function DashboardClient() {
                 <div><span className="text-muted-foreground">Worksheets:</span> {fileStats.worksheets}</div>
                 <div><span className="text-muted-foreground">Universities Found:</span> {fileStats.universitiesFound}</div>
                 <div><span className="text-muted-foreground">Valid Recipients:</span> {fileStats.validRecipients}</div>
-                <div><span className="text-muted-foreground">Duplicates Removed:</span> {fileStats.duplicateUniversitiesRemoved + fileStats.duplicateEmailsRemoved}</div>
+                <div>
+                  <span className="text-muted-foreground">Duplicates Removed:</span>{" "}
+                  {fileStats.duplicateUniversitiesRemoved + fileStats.duplicateEmailsRemoved > 0 ? (
+                    <button 
+                      type="button" 
+                      onClick={() => setShowDuplicatesModal(true)}
+                      className="font-semibold text-amber-400 hover:underline inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {fileStats.duplicateUniversitiesRemoved + fileStats.duplicateEmailsRemoved}
+                      <span className="text-[11px] text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">
+                        View Details 🔍
+                      </span>
+                    </button>
+                  ) : (
+                    <span>0</span>
+                  )}
+                </div>
                 <div><span className="text-muted-foreground">Rows Ignored:</span> {fileStats.rowsIgnored}</div>
                 <div><span className="text-muted-foreground">Ready To Send:</span> {stats.total}</div>
               </div>
@@ -914,6 +931,61 @@ export default function DashboardClient() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirmModal(false)}>Cancel</Button>
             <Button onClick={startCampaign}>Confirm & Start</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicates Breakdown Modal */}
+      <Dialog open={showDuplicatesModal} onOpenChange={setShowDuplicatesModal}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-400">
+              <AlertTriangle className="w-5 h-5 text-amber-400" />
+              Deduplication Breakdown
+            </DialogTitle>
+            <DialogDescription>
+              Detailed record of duplicate university names and email addresses detected and safely skipped.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="flex-1 mt-2 border rounded-md p-1">
+            {fileStats?.duplicatesList && fileStats.duplicatesList.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-44">Type</TableHead>
+                    <TableHead>University Name</TableHead>
+                    <TableHead>Worksheet / Country</TableHead>
+                    <TableHead>Reason & Original Source</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {fileStats.duplicatesList.map((dup, idx) => (
+                    <TableRow key={idx} className="text-xs">
+                      <TableCell>
+                        <Badge 
+                          variant="outline" 
+                          className={dup.type.includes("University") ? "border-amber-500/50 text-amber-400 bg-amber-500/10" : "border-blue-500/50 text-blue-400 bg-blue-500/10"}
+                        >
+                          {dup.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground">{dup.university}</TableCell>
+                      <TableCell className="font-mono text-muted-foreground">{dup.country}</TableCell>
+                      <TableCell className="text-muted-foreground">{dup.reason}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="p-8 text-center text-muted-foreground text-sm">
+                No duplicate entries detected in this Excel workbook.
+              </div>
+            )}
+          </ScrollArea>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowDuplicatesModal(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

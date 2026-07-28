@@ -12,11 +12,12 @@ export function parseExcelBuffer(buffer) {
     duplicateUniversitiesRemoved: 0,
     duplicateEmailsRemoved: 0,
     rowsIgnored: 0,
+    duplicatesList: [],
     recipients: []
   };
 
-  const seenUniversities = new Set();
-  const seenEmails = new Set();
+  const seenUniversities = new Map(); // uniKey -> { university, country }
+  const seenEmails = new Map(); // email -> { university, country }
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
@@ -76,6 +77,14 @@ export function parseExcelBuffer(buffer) {
       const uniKeyForSet = uniNameRaw.toLowerCase();
       if (seenUniversities.has(uniKeyForSet)) {
         results.duplicateUniversitiesRemoved++;
+        const original = seenUniversities.get(uniKeyForSet);
+        results.duplicatesList.push({
+          type: "Duplicate University Name",
+          university: uniNameRaw,
+          email: extractedEmails.join(", "),
+          country: country,
+          reason: `University "${uniNameRaw}" in sheet "${country}" was already added earlier in sheet "${original.country}"`
+        });
         continue;
       }
 
@@ -84,9 +93,17 @@ export function parseExcelBuffer(buffer) {
       for (const email of extractedEmails) {
         if (!seenEmails.has(email)) {
           uniqueValidEmails.push(email);
-          seenEmails.add(email);
+          seenEmails.set(email, { university: uniNameRaw, country });
         } else {
           results.duplicateEmailsRemoved++;
+          const original = seenEmails.get(email);
+          results.duplicatesList.push({
+            type: "Duplicate Email Address",
+            university: uniNameRaw,
+            email: email,
+            country: country,
+            reason: `Email "${email}" in sheet "${country}" (${uniNameRaw}) was already registered for "${original.university}" in sheet "${original.country}"`
+          });
         }
       }
 
@@ -95,7 +112,7 @@ export function parseExcelBuffer(buffer) {
         continue;
       }
 
-      seenUniversities.add(uniKeyForSet);
+      seenUniversities.set(uniKeyForSet, { university: uniNameRaw, country });
 
       const toEmail = uniqueValidEmails[0];
       const ccEmails = uniqueValidEmails.slice(1);
