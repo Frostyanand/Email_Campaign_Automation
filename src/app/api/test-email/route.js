@@ -41,11 +41,17 @@ export async function POST(request) {
 
     const transporter = getTransporter();
     const mailOptions = {
-      from: process.env.SMTP_USER,
+      from: `"Instabroad Medical" <${process.env.SMTP_USER}>`,
+      replyTo: process.env.SMTP_USER,
       to: recipientList.length > 0 ? recipientList : process.env.ADMIN_EMAIL,
-      subject: `[TEST EMAIL] ${subject || "Test Email"}`,
+      subject: subject || "Proposal for Exclusive Indian Student Admissions Partnership, Instabroad Medical",
       html: html,
-      text: htmlToText(html),
+      text: htmlToText(html, { wordwrap: 130 }),
+      headers: {
+        "X-Mailer": "Instabroad Mailer v1.0",
+        "X-Priority": "3 (Normal)",
+        "Importance": "Normal"
+      },
       attachments: processedAttachments
     };
 
