@@ -268,6 +268,7 @@ export default function DashboardClient() {
 
   const startCampaign = () => {
     setShowConfirmModal(false);
+    campaignStateRef.current = "Running";
     setCampaignState("Running");
     if (!runningRef.current) {
       runningRef.current = true;
@@ -276,11 +277,13 @@ export default function DashboardClient() {
   };
 
   const pauseCampaign = () => {
+    campaignStateRef.current = "Paused";
     setCampaignState("Paused");
     runningRef.current = false;
   };
 
   const resumeCampaign = () => {
+    campaignStateRef.current = "Running";
     setCampaignState("Running");
     if (!runningRef.current) {
       runningRef.current = true;
@@ -289,6 +292,7 @@ export default function DashboardClient() {
   };
 
   const stopCampaign = () => {
+    campaignStateRef.current = "Cancelled";
     setCampaignState("Cancelled");
     runningRef.current = false;
   };
@@ -320,118 +324,123 @@ export default function DashboardClient() {
 
   // Campaign Engine Loop
   const runCampaignLoop = async () => {
-    while (campaignStateRef.current === "Running") {
-      // Find next pending or retrying
-      let nextIndex = -1;
-      
-      // Need to use functional state update to safely read/write recipients without relying on stale closures, 
-      // but inside a loop it's tricky. We'll use a local copy pattern or mutable ref for recipients if it causes issues.
-      // For simplicity, we get current recipients from functional update just to read:
-      let currentRecipients = [];
-      setRecipients(prev => { currentRecipients = prev; return prev; });
-      
-      nextIndex = currentRecipients.findIndex(r => r.status === "Pending" || r.status === "Retrying");
-      
-      if (nextIndex === -1) {
-        setCampaignState("Completed");
-        runningRef.current = false;
-        toast.success("Campaign Completed!");
-        break;
-      }
+    try {
+      while (campaignStateRef.current === "Running") {
+        // Find next pending or retrying
+        let nextIndex = -1;
+        
+        let currentRecipients = [];
+        setRecipients(prev => { currentRecipients = prev; return prev; });
+        
+        nextIndex = currentRecipients.findIndex(r => r.status === "Pending" || r.status === "Retrying");
+        
+        if (nextIndex === -1) {
+          campaignStateRef.current = "Completed";
+          setCampaignState("Completed");
+          toast.success("Campaign Completed!");
+          break;
+        }
 
-      const recipient = currentRecipients[nextIndex];
-      const attempt = recipient.attempts + 1;
-      
-      // Update state to sending
-      setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Sending", attempts: attempt } : r));
+        const recipient = currentRecipients[nextIndex];
+        const attempt = recipient.attempts + 1;
+        
+        // Update state to sending
+        setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Sending", attempts: attempt } : r));
 
-      const tmpl = templates.find(t => t.id === selectedTemplate);
-      if (!tmpl) {
-        pauseCampaign();
-        toast.error("Template not found!");
-        break;
-      }
+        const tmpl = templates.find(t => t.id === selectedTemplate);
+        if (!tmpl) {
+          pauseCampaign();
+          toast.error("Template not found!");
+          break;
+        }
 
-      let html = tmpl.html;
-      html = html.replace(/{{UNIVERSITY_NAME}}/g, recipient.university || "");
-      html = html.replace(/{{COUNTRY}}/g, recipient.country || "");
-      html = html.replace(/{{TO_EMAIL}}/g, recipient.to || "");
-      html = html.replace(/{{CURRENT_DATE}}/g, format(new Date(), "PP"));
-      html = html.replace(/{{COMPANY_NAME}}/g, "Our Company");
-      html = html.replace(/{{SENDER_NAME}}/g, "Admin");
+        let html = tmpl.html;
+        html = html.replace(/{{UNIVERSITY_NAME}}/g, recipient.university || "");
+        html = html.replace(/{{COUNTRY}}/g, recipient.country || "");
+        html = html.replace(/{{TO_EMAIL}}/g, recipient.to || "");
+        html = html.replace(/{{CURRENT_DATE}}/g, format(new Date(), "PP"));
+        html = html.replace(/{{COMPANY_NAME}}/g, "Our Company");
+        html = html.replace(/{{SENDER_NAME}}/g, "Admin");
 
-      let subject = tmpl.subject;
-      subject = subject.replace(/{{COMPANY_NAME}}/g, "Our Company");
-      subject = subject.replace(/{{UNIVERSITY_NAME}}/g, recipient.university || "");
+        let subject = tmpl.subject;
+        subject = subject.replace(/{{COMPANY_NAME}}/g, "Our Company");
+        subject = subject.replace(/{{UNIVERSITY_NAME}}/g, recipient.university || "");
 
-      let overrideTo = null;
-      if (isTestModeRef.current) {
-        const rawList = testTargetEmailsRef.current.trim();
-        if (rawList) {
-          const emailList = rawList.split(",").map(e => e.trim()).filter(Boolean);
-          if (emailList.length > 0) {
-            overrideTo = emailList[nextIndex % emailList.length];
+        let overrideTo = null;
+        if (isTestModeRef.current) {
+          const rawList = testTargetEmailsRef.current.trim();
+          if (rawList) {
+            const emailList = rawList.split(",").map(e => e.trim()).filter(Boolean);
+            if (emailList.length > 0) {
+              overrideTo = emailList[nextIndex % emailList.length];
+            }
+          }
+          if (!overrideTo) {
+            overrideTo = "satyashish@wegbruck.com";
           }
         }
-        if (!overrideTo) {
-          overrideTo = "satyashish@wegbruck.com";
-        }
-      }
 
-      try {
-        const res = await fetch("/api/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            campaignId,
-            recipient,
-            html,
-            subject,
-            attachments: uploadedAttachments,
-            attempt,
-            overrideTo
-          })
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Sent", sentTime: data.timestamp } : r));
-        } else {
-          throw new Error(data.error);
-        }
-      } catch (error) {
-        // Handle failure & retries
-        if (attempt < 4) {
-          // Retry delays: 30-40s, 60-80s, 120-150s
-          const delays = [
-            [30, 40],
-            [60, 80],
-            [120, 150]
-          ];
-          const [min, max] = delays[attempt - 1];
-          const delaySecs = Math.floor(Math.random() * (max - min + 1)) + min;
+        try {
+          const res = await fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              campaignId,
+              recipient,
+              html,
+              subject,
+              attachments: uploadedAttachments,
+              attempt,
+              overrideTo
+            })
+          });
+          const data = await res.json();
           
-          setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Retrying", error: error.message } : r));
-          
-          if (campaignStateRef.current === "Running") {
-            await new Promise(r => setTimeout(r, delaySecs * 1000));
-            continue; // Go back to top of loop to retry immediately
+          if (data.success) {
+            setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Sent", sentTime: data.timestamp } : r));
+            if (isTestModeRef.current) {
+              toast.success(`[Test Mode] Sent to ${overrideTo} (${recipient.university})`);
+            } else {
+              toast.success(`Sent email to ${recipient.university}`);
+            }
+          } else {
+            throw new Error(data.error || "Email failed to send");
           }
-        } else {
-          setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Failed", error: error.message } : r));
+        } catch (error) {
+          toast.error(`Error sending to ${recipient.university}: ${error.message}`);
+          // Handle failure & retries
+          if (attempt < 4) {
+            const delays = [
+              [30, 40],
+              [60, 80],
+              [120, 150]
+            ];
+            const [min, max] = delays[attempt - 1];
+            const delaySecs = Math.floor(Math.random() * (max - min + 1)) + min;
+            
+            setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Retrying", error: error.message } : r));
+            
+            if (campaignStateRef.current === "Running") {
+              await new Promise(r => setTimeout(r, delaySecs * 1000));
+              continue;
+            }
+          } else {
+            setRecipients(prev => prev.map((r, i) => i === nextIndex ? { ...r, status: "Failed", error: error.message } : r));
+          }
+        }
+
+        // Calculate random delay for next email based on interval option
+        if (campaignStateRef.current === "Running") {
+          const intervalBase = parseInt(intervalOptionRef.current, 10);
+          const minDelay = intervalBase * 0.9;
+          const maxDelay = intervalBase * 1.1;
+          const delaySecs = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+          
+          await new Promise(r => setTimeout(r, delaySecs * 1000));
         }
       }
-
-      // Calculate random delay for next email based on interval option
-      if (campaignStateRef.current === "Running") {
-        const intervalBase = parseInt(intervalOptionRef.current, 10);
-        // +/- 10%
-        const minDelay = intervalBase * 0.9;
-        const maxDelay = intervalBase * 1.1;
-        const delaySecs = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-        
-        await new Promise(r => setTimeout(r, delaySecs * 1000));
-      }
+    } finally {
+      runningRef.current = false;
     }
   };
 
