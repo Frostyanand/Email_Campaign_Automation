@@ -48,10 +48,20 @@ export async function appendToSentBox({ from, to, cc, subject, html }) {
       port: imapPort,
       secure: true,
       auth: { user, pass },
-      logger: false
+      logger: false,
+      emitLogs: false
     });
 
     await client.connect();
+
+    let targetBox = "Sent";
+    try {
+      const list = await client.list();
+      const sentBox = list.find(b => b.specialUse === "\\Sent" || b.name.toLowerCase() === "sent" || b.name.toLowerCase() === "sent items");
+      if (sentBox) targetBox = sentBox.path;
+    } catch (e) {
+      console.warn("IMAP folder list fallback to Sent");
+    }
 
     const toStr = Array.isArray(to) ? to.join(", ") : to;
     const ccStr = Array.isArray(cc) && cc.length > 0 ? `Cc: ${cc.join(", ")}\r\n` : "";
@@ -66,9 +76,10 @@ export async function appendToSentBox({ from, to, cc, subject, html }) {
 `Content-Type: text/html; charset=utf-8\r\n\r\n` +
 `${html}`;
 
-    await client.append("Sent", Buffer.from(rawMessage), ["\\Seen"]);
+    await client.append(targetBox, Buffer.from(rawMessage), ["\\Seen"]);
     await client.logout();
+    console.log(`[IMAP Sync] Successfully synced email to Titan ${targetBox} for ${toStr}`);
   } catch (err) {
-    console.error("IMAP Sent Sync Warning:", err.message);
+    console.error("IMAP Sent Sync Error:", err.message);
   }
 }

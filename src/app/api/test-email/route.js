@@ -56,7 +56,7 @@ export async function POST(request) {
     };
 
     await transporter.sendMail(mailOptions);
-    appendToSentBox({
+    await appendToSentBox({
       from: mailOptions.from,
       to: mailOptions.to,
       subject: mailOptions.subject,

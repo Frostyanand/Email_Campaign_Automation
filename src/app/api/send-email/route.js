@@ -61,8 +61,8 @@ export async function POST(request) {
       const info = await transporter.sendMail(mailOptions);
       responseStr = info.response || "Success";
       
-      // Async IMAP Sent box synchronization
-      appendToSentBox({
+      // Await IMAP Sent box synchronization so Vercel serverless worker does not terminate execution
+      await appendToSentBox({
         from: mailOptions.from,
         to: mailOptions.to,
         cc: mailOptions.cc,
